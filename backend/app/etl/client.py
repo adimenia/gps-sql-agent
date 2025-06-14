@@ -121,3 +121,47 @@ class CatapultSyncClient:
         logger.info("Fetching activities from Catapult API")
         data = self.get("/activities")
         return data if data else []
+    
+    def fetch_athletes(self, activity_id: int) -> List[Dict[str, Any]]:
+        """Fetch athletes for a specific activity."""
+        logger.info(f"Fetching athletes for activity {activity_id}")
+        data = self.get(f"/activities/{activity_id}/athletes")
+        return data if data else []
+    
+    def fetch_periods(self, activity_id: int) -> List[Dict[str, Any]]:
+        """Fetch periods for a specific activity."""
+        logger.info(f"Fetching periods for activity {activity_id}")
+        data = self.get(f"/activities/{activity_id}/periods")
+        return data if data else []
+    
+    def fetch_events(self, activity_id: int, athlete_id: int, event_types: str = None) -> List[Dict[str, Any]]:
+        """Fetch events for a specific activity and athlete."""
+        if not event_types:
+            event_types = "ima_acceleration,ima_jump,football_movement_analysis"
+        
+        logger.info(f"Fetching events for activity {activity_id}, athlete {athlete_id}")
+        params = {"event_types": event_types}
+        data = self.get(f"/activities/{activity_id}/athletes/{athlete_id}/events", params)
+        return data if data else []
+    
+    def fetch_efforts(self, activity_id: int, athlete_id: int, effort_types: str = None) -> List[Dict[str, Any]]:
+        """Fetch efforts for a specific activity and athlete."""
+        if not effort_types:
+            effort_types = "velocity,acceleration"
+        
+        logger.info(f"Fetching efforts for activity {activity_id}, athlete {athlete_id}")
+        params = {"effort_types": effort_types}
+        data = self.get(f"/activities/{activity_id}/athletes/{athlete_id}/efforts", params)
+        return data if data else []
+    
+    def fetch_positions(self) -> List[Dict[str, Any]]:
+        """Fetch positions from the API."""
+        logger.info("Fetching positions from Catapult API")
+        data = self.get("/positions")
+        return data if data else []
+    
+    def fetch_parameters(self) -> List[Dict[str, Any]]:
+        """Fetch parameters from the API."""
+        logger.info("Fetching parameters from Catapult API")
+        data = self.get("/parameters")
+        return data if data else []

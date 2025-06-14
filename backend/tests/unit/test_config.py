@@ -13,7 +13,7 @@ def test_default_settings():
     settings = Settings()
     
     assert settings.postgres_host == "localhost"
-    assert settings.postgres_port == 5432
+    assert settings.postgres_port == 5433  # Using port from .env file
     assert settings.postgres_db == "sports_analytics"
     assert settings.postgres_user == "postgres"
     assert settings.app_env == "development"

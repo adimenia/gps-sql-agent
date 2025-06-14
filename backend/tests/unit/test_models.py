@@ -159,8 +159,8 @@ def test_effort_creation(test_db_session):
     # Verify effort was created with relationships
     retrieved_effort = test_db_session.query(Effort).first()
     assert retrieved_effort.band == "zone_4"
-    assert retrieved_effort.distance == 25.5
-    assert retrieved_effort.velocity == 7.2
+    assert float(retrieved_effort.distance) == 25.5
+    assert float(retrieved_effort.velocity) == 7.2
     assert retrieved_effort.athlete.first_name == "John"
     assert retrieved_effort.activity.name == "Test Session"
 

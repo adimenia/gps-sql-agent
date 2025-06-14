@@ -1,6 +1,6 @@
 """Activity data transformer."""
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from .base import BaseTransformer
 import logging
 import hashlib
@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 class ActivityTransformer(BaseTransformer):
     """Transform raw activity data for database insertion."""
     
+    def _convert_id_to_int(self, id_value: Any) -> Optional[int]:
+        """Convert ID to integer, handling both integers and UUID strings."""
+        if id_value is None:
+            return None
+        if isinstance(id_value, int):
+            return id_value
+        # Convert UUID string to integer using hash
+        return abs(int(hashlib.sha256(str(id_value).encode()).hexdigest()[:15], 16))
+    
     def transform(self, raw_activity: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Transform a single activity record."""
         if not self.validate_required_fields(raw_activity, ["id", "name"]):
@@ -19,9 +28,8 @@ class ActivityTransformer(BaseTransformer):
         try:
             owner_data = raw_activity.get("owner", {})
             
-            # Convert UUID to integer using hash (for compatibility with bigint primary key)
-            uuid_str = str(raw_activity["id"])
-            activity_id = abs(int(hashlib.sha256(uuid_str.encode()).hexdigest()[:15], 16))
+            # Handle both integer IDs and UUID strings
+            activity_id = self._convert_id_to_int(raw_activity["id"])
             
             # Convert game_id UUID to integer if present
             game_id = self.safe_get(raw_activity, "game_id")
@@ -35,8 +43,8 @@ class ActivityTransformer(BaseTransformer):
                 "end_time": self.transform_timestamp(raw_activity.get("end_time")),
                 "game_id": game_id,
                 
-                # Owner information (convert UUID to integer)
-                "owner_id": abs(int(hashlib.sha256(str(self.safe_get(owner_data, "id") or "").encode()).hexdigest()[:15], 16)) if self.safe_get(owner_data, "id") else None,
+                # Owner information (handle both integer IDs and UUID strings)
+                "owner_id": self._convert_id_to_int(self.safe_get(owner_data, "id")),
                 "owner_customer_id": self.safe_get(owner_data, "customer_id"),
                 "owner_name": self.safe_get(owner_data, "name"),
                 "owner_email": self.safe_get(owner_data, "email"),
@@ -68,7 +76,17 @@ class OwnerExtractor:
     """Extract unique owners from activities for separate storage."""
     
     @staticmethod
-    def extract_owners(activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _convert_id_to_int(id_value: Any) -> Optional[int]:
+        """Convert ID to integer, handling both integers and UUID strings."""
+        if id_value is None:
+            return None
+        if isinstance(id_value, int):
+            return id_value
+        # Convert UUID string to integer using hash
+        return abs(int(hashlib.sha256(str(id_value).encode()).hexdigest()[:15], 16))
+    
+    @classmethod
+    def extract_owners(cls, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Extract unique owners from activity data."""
         owners_map = {}
         
@@ -77,8 +95,8 @@ class OwnerExtractor:
             owner_uuid = owner_data.get("id")
             
             if owner_uuid and owner_uuid not in owners_map:
-                # Convert UUID to integer using same method as ActivityTransformer
-                owner_id = abs(int(hashlib.sha256(str(owner_uuid).encode()).hexdigest()[:15], 16))
+                # Convert ID using same method as ActivityTransformer
+                owner_id = cls._convert_id_to_int(owner_uuid)
                 
                 owners_map[owner_uuid] = {
                     "owner_id": owner_id,

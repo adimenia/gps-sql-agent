@@ -3,6 +3,7 @@
 from typing import Dict, List, Any
 from .base import BaseTransformer
 import logging
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,10 @@ class EventTransformer(BaseTransformer):
                 logger.warning(f"Expected list for event type {event_type}, got {type(event_list)}")
                 continue
             
-            for event_detail in event_list:
-                event_id = event_detail.get("event_id")
-                if not event_id:
-                    logger.warning(f"Missing event_id in {event_type} event")
-                    continue
+            for i, event_detail in enumerate(event_list):
+                # Generate a unique numeric event_id since the API doesn't provide one
+                event_id_str = f"{activity_id}_{athlete_id}_{event_type}_{i}_{event_detail.get('start_time', 0)}"
+                event_id = abs(int(hashlib.sha256(event_id_str.encode()).hexdigest()[:15], 16))
                 
                 try:
                     transformed = {

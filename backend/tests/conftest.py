@@ -3,7 +3,7 @@
 import pytest
 import os
 import tempfile
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
@@ -18,12 +18,19 @@ from app.core.database import get_database_session
 from app.core.config import settings
 
 
+def _fk_pragma_on_connect(dbapi_con, _con_record):
+    """Disable foreign key checks for SQLite testing."""
+    dbapi_con.execute('pragma foreign_keys=OFF')
+
 @pytest.fixture(scope="session")
 def test_db_engine():
     """Create a test database engine."""
     # Use SQLite for testing for simplicity
     test_db_url = "sqlite:///./test.db"
     engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    
+    # Disable foreign key constraints for testing
+    event.listen(engine, "connect", _fk_pragma_on_connect)
     
     # Create all tables
     Base.metadata.create_all(bind=engine)
@@ -44,8 +51,16 @@ def test_db_session(test_db_engine):
     
     yield session
     
+    # Clean up: rollback and close, then clean all tables
     session.rollback()
     session.close()
+    
+    # Clear all tables after each test
+    with test_db_engine.connect() as connection:
+        transaction = connection.begin()
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(table.delete())
+        transaction.commit()
 
 
 @pytest.fixture(scope="function")
