@@ -21,13 +21,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def run_full_pipeline():
-    """Run the complete ETL pipeline."""
-    logger.info("Starting ETL pipeline execution")
+async def run_full_pipeline(start_date=None, end_date=None):
+    """Run the complete ETL pipeline with optional date filtering."""
+    date_info = f" (filtered: {start_date} to {end_date})" if start_date or end_date else ""
+    logger.info(f"Starting ETL pipeline execution{date_info}")
     start_time = datetime.now()
     
     try:
-        stats = await run_etl_pipeline()
+        from app.etl.orchestrator import ETLOrchestrator
+        orchestrator = ETLOrchestrator()
+        try:
+            stats = await orchestrator.run_full_pipeline(start_date, end_date)
+        finally:
+            orchestrator.close()
         
         end_time = datetime.now()
         duration = end_time - start_time
@@ -117,6 +123,16 @@ def main():
         help="Command to execute"
     )
     parser.add_argument(
+        "--start-date",
+        type=str,
+        help="Start date for data extraction (YYYY-MM-DD format)"
+    )
+    parser.add_argument(
+        "--end-date", 
+        type=str,
+        help="End date for data extraction (YYYY-MM-DD format)"
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose logging"
@@ -151,7 +167,7 @@ def main():
     elif args.command == "dry-run":
         success = asyncio.run(run_dry_run())
     elif args.command == "run":
-        success = asyncio.run(run_full_pipeline())
+        success = asyncio.run(run_full_pipeline(args.start_date, args.end_date))
     
     sys.exit(0 if success else 1)
 

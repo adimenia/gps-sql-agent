@@ -34,9 +34,15 @@ class ETLOrchestrator:
         self.activity_uuid_to_int = {}
         self.athlete_uuid_to_int = {}
     
-    async def run_full_pipeline(self) -> Dict[str, int]:
-        """Run the complete ETL pipeline."""
-        logger.info("Starting full ETL pipeline")
+    async def run_full_pipeline(self, start_date: str = None, end_date: str = None) -> Dict[str, int]:
+        """Run the complete ETL pipeline with optional date filtering."""
+        date_info = f" (filtered: {start_date} to {end_date})" if start_date or end_date else ""
+        logger.info(f"Starting full ETL pipeline{date_info}")
+        
+        # For development with clean database, skip the check
+        # This ensures we always run the ETL when explicitly requested
+        logger.info("Skipping existing data check for clean development run")
+        
         stats = {
             'activities': 0,
             'owners': 0,
@@ -47,39 +53,58 @@ class ETLOrchestrator:
         
         try:
             async with CatapultAPIClient() as client:
-                # Step 1: Process activities and owners
-                activities_stats = await self.process_activities(client)
+                # Step 1: Process activities and owners with date filtering
+                activities_stats = await self.process_activities(client, start_date, end_date)
                 stats.update(activities_stats)
                 
                 # Step 2: Process athletes, events, and efforts for each activity
-                activity_uuids = await self.get_activity_uuids()
+                activity_uuids = await self.get_activity_uuids(start_date, end_date)
                 
-                # Limit to first 3 activities for initial testing
-                activity_uuids = activity_uuids[:3]
-                logger.info(f"Processing {len(activity_uuids)} activities (limited for testing)")
+                # Process activities in manageable batches
+                total_activities = len(activity_uuids)
+                # For development, process all activities found in the date range
+                logger.info(f"Processing {total_activities} activities found in date range")
                 
-                for activity_uuid in activity_uuids:
-                    activity_id = self._convert_id_to_int(activity_uuid)
-                    logger.info(f"Processing activity {activity_id} (UUID: {activity_uuid})")
-                    
-                    # Store mapping for API calls
-                    self.activity_uuid_to_int[activity_uuid] = activity_id
-                    
-                    # Process athletes for this activity
-                    athlete_stats = await self.process_activity_athletes(client, activity_uuid, activity_id)
-                    stats['athletes'] += athlete_stats.get('athletes', 0)
-                    
-                    # Get athletes for this activity to process their events/efforts
-                    athlete_data = await self.get_activity_athlete_data(client, activity_uuid)
-                    
-                    for athlete_uuid, athlete_id in athlete_data:
-                        # Process events
-                        event_stats = await self.process_athlete_events(client, activity_uuid, activity_id, athlete_uuid, athlete_id)
-                        stats['events'] += event_stats.get('events', 0)
+                for i, activity_uuid in enumerate(activity_uuids, 1):
+                    try:
+                        activity_id = self._convert_id_to_int(activity_uuid)
+                        logger.info(f"Processing activity {i}/{len(activity_uuids)}: {activity_id} (UUID: {activity_uuid[:8]}...)")
                         
-                        # Process efforts
-                        effort_stats = await self.process_athlete_efforts(client, activity_uuid, activity_id, athlete_uuid, athlete_id)
-                        stats['efforts'] += effort_stats.get('efforts', 0)
+                        # Store mapping for API calls
+                        self.activity_uuid_to_int[activity_uuid] = activity_id
+                        
+                        # Process athletes for this activity
+                        athlete_stats = await self.process_activity_athletes(client, activity_uuid, activity_id)
+                        stats['athletes'] += athlete_stats.get('athletes', 0)
+                        
+                        # Get athletes for this activity to process their events/efforts
+                        athlete_data = await self.get_activity_athlete_data(client, activity_uuid)
+                        
+                        if not athlete_data:
+                            logger.warning(f"No athletes found for activity {activity_uuid[:8]}...")
+                            continue
+                        
+                        for athlete_uuid, athlete_id in athlete_data:
+                            try:
+                                # Process events
+                                event_stats = await self.process_athlete_events(client, activity_uuid, activity_id, athlete_uuid, athlete_id)
+                                stats['events'] += event_stats.get('events', 0)
+                                
+                                # Process efforts
+                                effort_stats = await self.process_athlete_efforts(client, activity_uuid, activity_id, athlete_uuid, athlete_id)
+                                stats['efforts'] += effort_stats.get('efforts', 0)
+                                
+                            except Exception as athlete_error:
+                                logger.error(f"Error processing athlete {athlete_uuid[:8]}... in activity {activity_uuid[:8]}...: {athlete_error}")
+                                continue
+                        
+                        # Log progress every 10 activities
+                        if i % 10 == 0:
+                            logger.info(f"Progress: {i}/{len(activity_uuids)} activities processed. Current stats: {stats}")
+                    
+                    except Exception as activity_error:
+                        logger.error(f"Error processing activity {activity_uuid[:8]}...: {activity_error}")
+                        continue
                 
                 logger.info(f"ETL pipeline completed. Stats: {stats}")
                 return stats
@@ -90,14 +115,14 @@ class ETLOrchestrator:
         finally:
             self.db.close()
     
-    async def process_activities(self, client: CatapultAPIClient) -> Dict[str, int]:
-        """Process activities and extract owners."""
+    async def process_activities(self, client: CatapultAPIClient, start_date: str = None, end_date: str = None) -> Dict[str, int]:
+        """Process activities and extract owners with optional date filtering."""
         logger.info("Processing activities")
         
-        # Fetch activities
-        raw_activities = await client.fetch_activities()
+        # Fetch activities with date filtering
+        raw_activities = await client.fetch_activities(start_date, end_date)
         if not raw_activities:
-            logger.warning("No activities found")
+            logger.warning("No activities found for the specified date range")
             return {'activities': 0, 'owners': 0}
         
         # Transform activities
@@ -171,30 +196,44 @@ class ETLOrchestrator:
         """Process efforts for a specific athlete in an activity."""
         logger.debug(f"Processing efforts for activity {activity_id}, athlete {athlete_id}")
         
-        # Fetch efforts using original UUIDs
-        raw_efforts = await client.fetch_efforts(activity_uuid, athlete_uuid)
-        if not raw_efforts:
-            return {'efforts': 0}
+        try:
+            # Fetch efforts using original UUIDs
+            raw_efforts = await client.fetch_efforts(activity_uuid, athlete_uuid)
+            if not raw_efforts:
+                logger.debug(f"No raw efforts found for activity {activity_uuid[:8]}..., athlete {athlete_uuid[:8]}...")
+                return {'efforts': 0}
+            
+            logger.debug(f"Found {len(raw_efforts)} raw efforts for activity {activity_uuid[:8]}..., athlete {athlete_uuid[:8]}...")
+            
+            # Transform efforts using converted integer IDs
+            all_efforts = []
+            for raw_effort in raw_efforts:
+                try:
+                    transformed = self.effort_transformer.transform(raw_effort, activity_id, athlete_id)
+                    all_efforts.extend(transformed)
+                except Exception as transform_error:
+                    logger.warning(f"Failed to transform effort for activity {activity_id}, athlete {athlete_id}: {transform_error}")
+                    continue
+            
+            # Load efforts
+            if all_efforts:
+                effort_loader = LoaderFactory.get_loader('efforts', self.db)
+                efforts_count = self.batch_loader.load_in_batches(effort_loader, all_efforts)
+                logger.debug(f"Loaded {efforts_count} efforts for activity {activity_id}, athlete {athlete_id}")
+                return {'efforts': efforts_count}
+            else:
+                logger.debug(f"No efforts to load after transformation for activity {activity_id}, athlete {athlete_id}")
         
-        # Transform efforts using converted integer IDs
-        all_efforts = []
-        for raw_effort in raw_efforts:
-            transformed = self.effort_transformer.transform(raw_effort, activity_id, athlete_id)
-            all_efforts.extend(transformed)
-        
-        # Load efforts
-        if all_efforts:
-            effort_loader = LoaderFactory.get_loader('efforts', self.db)
-            efforts_count = self.batch_loader.load_in_batches(effort_loader, all_efforts)
-            return {'efforts': efforts_count}
+        except Exception as e:
+            logger.error(f"Error processing efforts for activity {activity_uuid[:8]}..., athlete {athlete_uuid[:8]}...: {e}")
         
         return {'efforts': 0}
     
-    async def get_activity_uuids(self) -> List[str]:
-        """Get list of activity UUIDs from API."""
+    async def get_activity_uuids(self, start_date: str = None, end_date: str = None) -> List[str]:
+        """Get list of activity UUIDs from API with optional date filtering."""
         try:
             async with CatapultAPIClient() as client:
-                activities = await client.fetch_activities()
+                activities = await client.fetch_activities(start_date, end_date)
                 return [activity['id'] for activity in activities if 'id' in activity]
         except Exception as e:
             logger.error(f"Error fetching activity UUIDs: {e}")

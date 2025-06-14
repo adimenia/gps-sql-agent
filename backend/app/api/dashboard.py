@@ -1,10 +1,10 @@
 """Dashboard API endpoints for metrics and analytics."""
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, desc
+from sqlalchemy import func, and_, desc, text
 from app.core.database import get_db
 from app.models.sports import Activity, Athlete, Event, Effort, Owner
 
@@ -195,7 +195,7 @@ async def get_athlete_metrics(
         Athlete.athlete_id,
         Athlete.first_name,
         Athlete.last_name,
-        func.count(Effort.effort_id).label('effort_count')
+        func.count(Effort.id).label('effort_count')
     ).join(Effort).filter(
         Effort.created_at >= start_date
     ).group_by(
@@ -276,7 +276,7 @@ async def get_performance_metrics(
         func.avg(Effort.velocity).label('avg_velocity'),
         func.max(Effort.velocity).label('max_velocity'),
         func.min(Effort.velocity).label('min_velocity'),
-        func.count(Effort.effort_id).label('velocity_efforts')
+        func.count(Effort.id).label('velocity_efforts')
     ).first()
     
     # Acceleration statistics
@@ -284,7 +284,7 @@ async def get_performance_metrics(
         func.avg(Effort.acceleration).label('avg_acceleration'),
         func.max(Effort.acceleration).label('max_acceleration'),
         func.min(Effort.acceleration).label('min_acceleration'),
-        func.count(Effort.effort_id).label('acceleration_efforts')
+        func.count(Effort.id).label('acceleration_efforts')
     ).first()
     
     # Distance statistics
@@ -292,13 +292,13 @@ async def get_performance_metrics(
         func.avg(Effort.distance).label('avg_distance'),
         func.sum(Effort.distance).label('total_distance'),
         func.max(Effort.distance).label('max_distance'),
-        func.count(Effort.effort_id).label('distance_efforts')
+        func.count(Effort.id).label('distance_efforts')
     ).first()
     
     # Effort band distribution
     band_distribution = effort_query.filter(Effort.band.isnot(None)).with_entities(
         Effort.band,
-        func.count(Effort.effort_id).label('count')
+        func.count(Effort.id).label('count')
     ).group_by(Effort.band).all()
     
     # Event intensity distribution
@@ -391,4 +391,138 @@ async def get_activity_timeline(
             }
             for point in timeline_data
         ]
+    }
+
+
+@router.get("/charts/performance-trends")
+async def get_performance_trends(
+    days: int = Query(14, ge=7, le=90, description="Number of days to look back"),
+    group_by: str = Query("day", regex="^(day|week)$", description="Group results by time period"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """Get performance trends data for charts showing velocity and acceleration over time."""
+    
+    # First, get the actual data range available
+    actual_range = db.query(
+        func.min(Effort.start_time).label('earliest'),
+        func.max(Effort.start_time).label('latest')
+    ).filter(Effort.start_time.isnot(None)).first()
+    
+    if not actual_range.earliest or not actual_range.latest:
+        # No data available
+        return {
+            "status": "no_data",
+            "message": "No effort data available",
+            "chart_data": [],
+            "intensity_data": [],
+            "date_range": {"start": None, "end": None},
+            "total_efforts": 0
+        }
+    
+    # Smart date filtering logic
+    data_start = actual_range.earliest.date()
+    data_end = actual_range.latest.date()
+    data_span_days = (data_end - data_start).days + 1
+    
+    # If requested days is larger than available data span, use full data range
+    if days >= data_span_days:
+        start_date = data_start
+        end_date = data_end
+        filtered_days = data_span_days
+    else:
+        # Use the most recent 'days' worth of data from the available range
+        start_date = data_end - timedelta(days=days-1)  # -1 to include end date
+        end_date = data_end
+        filtered_days = days
+        
+        # Ensure start_date doesn't go before our actual data
+        if start_date < data_start:
+            start_date = data_start
+            filtered_days = (data_end - data_start).days + 1
+    
+    # Convert to datetime for database queries
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
+    # Determine date truncation for start_time (original sports data timestamps)
+    if group_by == "day":
+        date_trunc = func.date_trunc('day', Effort.start_time)
+    else:  # week
+        date_trunc = func.date_trunc('week', Effort.start_time)
+    
+    # Query performance trends with aggregated data using smart date filtering
+    performance_trends = db.query(
+        date_trunc.label('date'),
+        func.avg(Effort.velocity).label('avg_velocity'),
+        func.max(Effort.velocity).label('max_velocity'),
+        func.avg(Effort.acceleration).label('avg_acceleration'),
+        func.max(Effort.acceleration).label('max_acceleration'),
+        func.count(Effort.id).label('effort_count'),
+        func.count(func.distinct(Effort.athlete_id)).label('athlete_count')
+    ).filter(
+        Effort.start_time >= start_datetime,
+        Effort.start_time <= end_datetime,
+        Effort.start_time.isnot(None)
+    ).group_by(date_trunc).order_by(date_trunc).all()
+    
+    # Query effort intensity distribution over time using smart date filtering
+    intensity_trends = db.query(
+        date_trunc.label('date'),
+        Effort.band,
+        func.count(Effort.id).label('count')
+    ).filter(
+        Effort.start_time >= start_datetime,
+        Effort.start_time <= end_datetime,
+        Effort.start_time.isnot(None),
+        Effort.band.isnot(None)
+    ).group_by(date_trunc, Effort.band).order_by(date_trunc).all()
+    
+    # Process intensity data into chart format
+    intensity_by_date = {}
+    for record in intensity_trends:
+        date_str = record.date.isoformat() if record.date else None
+        if date_str not in intensity_by_date:
+            intensity_by_date[date_str] = {}
+        intensity_by_date[date_str][record.band] = record.count
+    
+    # Transform actual data
+    chart_data = [
+        {
+            "date": point.date.strftime("%Y-%m-%d") if point.date else None,
+            "avg_velocity": round(float(point.avg_velocity), 2) if point.avg_velocity else 0,
+            "max_velocity": round(float(point.max_velocity), 2) if point.max_velocity else 0,
+            "avg_acceleration": round(float(point.avg_acceleration), 2) if point.avg_acceleration else 0,
+            "max_acceleration": round(float(point.max_acceleration), 2) if point.max_acceleration else 0,
+            "effort_count": point.effort_count,
+            "athlete_count": point.athlete_count
+        }
+        for point in performance_trends
+    ]
+    
+
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "requested_days": days,
+        "actual_days": filtered_days,
+        "group_by": group_by,
+        "chart_data": chart_data,
+        "intensity_distribution": intensity_by_date,
+        "summary": {
+            "total_efforts": sum(point.effort_count for point in performance_trends) if performance_trends else 0,
+            "unique_athletes": max((point.athlete_count for point in performance_trends), default=0) if performance_trends else 0,
+            "date_range": {
+                "start": start_date.strftime("%Y-%m-%d"),
+                "end": end_date.strftime("%Y-%m-%d")
+            },
+            "available_data_range": {
+                "start": data_start.strftime("%Y-%m-%d"),
+                "end": data_end.strftime("%Y-%m-%d"),
+                "total_days": data_span_days
+            }
+        },
+        "filtering_applied": {
+            "smart_filtering": True,
+            "requested_range_available": days <= data_span_days,
+            "description": f"Showing {'full available data' if days >= data_span_days else f'last {filtered_days} days'} from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        }
     }

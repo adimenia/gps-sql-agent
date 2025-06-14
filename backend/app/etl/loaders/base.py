@@ -103,6 +103,16 @@ class BaseLoader(ABC):
         except Exception as e:
             logger.error(f"Error checking record existence: {e}")
             return False
+    
+    def get_table_count(self, table) -> int:
+        """Get the current count of records in a table."""
+        try:
+            from sqlalchemy import func, select
+            result = self.db.execute(select(func.count()).select_from(table))
+            return result.scalar()
+        except Exception as e:
+            logger.error(f"Error getting table count for {table.name}: {e}")
+            return 0
 
 
 class BatchLoader:

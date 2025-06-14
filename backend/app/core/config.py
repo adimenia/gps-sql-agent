@@ -7,10 +7,10 @@ class Settings(BaseSettings):
     
     # Database settings
     postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    postgres_port: int = 5433  # Docker container port
     postgres_db: str = "sports_analytics"
     postgres_user: str = "postgres"
-    postgres_password: str = "password"
+    postgres_password: str = "P@ssw0rd"  # Match actual Docker password
     
     # Catapult API settings
     catapult_api_url: str = "https://connect-eu.catapultsports.com/api/v6"

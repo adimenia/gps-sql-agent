@@ -43,10 +43,16 @@ class CatapultAPIClient:
             logger.error(f"Unexpected error fetching {endpoint}: {e}")
             return None
     
-    async def fetch_activities(self) -> List[Dict[str, Any]]:
-        """Fetch activities from the API."""
-        logger.info("Fetching activities from Catapult API")
-        data = await self.get("/activities")
+    async def fetch_activities(self, start_date: str = None, end_date: str = None) -> List[Dict[str, Any]]:
+        """Fetch activities from the API with optional date filtering."""
+        params = {}
+        if start_date:
+            params['start_date'] = start_date
+        if end_date:
+            params['end_date'] = end_date
+            
+        logger.info(f"Fetching activities from Catapult API (date range: {start_date} to {end_date})")
+        data = await self.get("/activities", params=params)
         return data if data else []
     
     async def fetch_athletes(self, activity_id: int) -> List[Dict[str, Any]]:

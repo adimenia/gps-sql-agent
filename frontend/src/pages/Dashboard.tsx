@@ -9,6 +9,7 @@ import {
   HStack,
   Spinner,
 } from '@chakra-ui/react'
+import SimpleLineChart from '../components/charts/SimpleLineChart'
 
 interface DashboardStats {
   activities: number
@@ -17,14 +18,28 @@ interface DashboardStats {
   efforts: number
 }
 
+interface ChartData {
+  x: string
+  velocity: number
+  acceleration: number
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [chartData, setChartData] = useState<ChartData[]>([])
+  const [chartLoading, setChartLoading] = useState(false)
+  const [days, setDays] = useState(14)
 
   useEffect(() => {
     fetchDashboardStats()
+    fetchChartData()
   }, [])
+
+  useEffect(() => {
+    fetchChartData()
+  }, [days])
 
   const fetchDashboardStats = async () => {
     try {
@@ -32,7 +47,7 @@ export default function Dashboard() {
       setError(null)
       
       // Basic API call to get overview metrics
-      const response = await fetch('/api/v1/dashboard/metrics/overview')
+      const response = await fetch('http://localhost:8001/api/v1/dashboard/metrics/overview')
       
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard stats')
@@ -44,6 +59,34 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchChartData = async () => {
+    try {
+      setChartLoading(true)
+      
+      const response = await fetch(`http://localhost:8001/api/v1/dashboard/charts/performance-trends?days=${days}&group_by=day`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch chart data')
+      }
+      
+      const data = await response.json()
+      
+      // Transform the data for our chart
+      const transformedData: ChartData[] = data.chart_data.map((item: any) => ({
+        x: item.date,
+        velocity: item.avg_velocity,
+        acceleration: item.avg_acceleration
+      }))
+      
+      setChartData(transformedData)
+    } catch (err) {
+      console.error('Error fetching chart data:', err)
+      // Don't set error state for chart, just log it
+    } finally {
+      setChartLoading(false)
     }
   }
 
@@ -82,7 +125,7 @@ export default function Dashboard() {
         </Text>
       </Box>
 
-      {stats && (
+{stats && (
         <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={6}>
           <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
             <Text fontSize="3xl" fontWeight="bold" color="blue.600">{stats.activities}</Text>
@@ -109,6 +152,69 @@ export default function Dashboard() {
           </Box>
         </SimpleGrid>
       )}
+
+      {/* Performance Trends Chart */}
+      <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+        <VStack gap={4} align="stretch">
+          <HStack justify="space-between" align="center" wrap="wrap" gap={4}>
+            <Box>
+              <Heading size="lg" mb={2} color="blue.600">
+                Performance Trends
+              </Heading>
+              <Text color="gray.600">
+                Velocity and acceleration trends over time
+              </Text>
+            </Box>
+            
+            <select 
+              value={days} 
+              onChange={(e) => setDays(Number(e.target.value))}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: '1px solid #E2E8F0',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
+            >
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+              <option value={60}>60 days</option>
+            </select>
+          </HStack>
+
+          {chartLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" h="300px">
+              <VStack gap={2}>
+                <Spinner size="lg" color="blue.500" />
+                <Text color="gray.600">Loading chart data...</Text>
+              </VStack>
+            </Box>
+          ) : chartData.length > 0 ? (
+            <Box>
+              <HStack gap={6} mb={4} wrap="wrap" justify="center">
+                <HStack gap={2}>
+                  <Box w={4} h={4} bg="blue.500" borderRadius="sm"></Box>
+                  <Text fontSize="sm" color="gray.600">Velocity (m/s)</Text>
+                </HStack>
+                <HStack gap={2}>
+                  <Box w={4} h={4} bg="orange.500" borderRadius="sm"></Box>
+                  <Text fontSize="sm" color="gray.600">Acceleration (m/s²)</Text>
+                </HStack>
+              </HStack>
+              <SimpleLineChart data={chartData} width={800} height={300} />
+            </Box>
+          ) : (
+            <Box bg="gray.50" borderRadius="md" p={8} display="flex" alignItems="center" justifyContent="center" minH="300px">
+              <VStack gap={2}>
+                <Text color="gray.600">No performance data available for the selected period</Text>
+                <Text fontSize="sm" color="gray.500">Try selecting a longer time period (30+ days)</Text>
+              </VStack>
+            </Box>
+          )}
+        </VStack>
+      </Box>
 
       <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
         <Heading size="md" mb={4}>
