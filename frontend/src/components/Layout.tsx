@@ -1,5 +1,14 @@
 import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import {
+  Box,
+  Flex,
+  Heading,
+  Container,
+  Text,
+  Button,
+  HStack,
+} from '@chakra-ui/react'
 
 interface LayoutProps {
   children: ReactNode
@@ -7,55 +16,54 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
+  const bg = 'white'
+  const borderColor = 'gray.200'
 
   return (
-    <div className="app">
-      <nav className="nav">
-        <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
+    <Box minH="100vh" display="flex" flexDirection="column" bg="gray.50">
+      <Box as="nav" bg={bg} borderBottom="1px" borderColor={borderColor} shadow="sm">
+        <Container maxW="7xl" py={4}>
+          <Flex justify="space-between" align="center">
+            <Heading size="lg" color="blue.600">
               🏃‍♂️ Sports Analytics Platform
-            </h1>
-            <ul className="nav-links">
-              <li>
-                <Link 
-                  to="/dashboard" 
-                  className={`nav-link ${location.pathname === '/dashboard' || location.pathname === '/' ? 'active' : ''}`}
-                >
-                  Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  to="/chat" 
-                  className={`nav-link ${location.pathname === '/chat' ? 'active' : ''}`}
-                >
-                  Chat Agent
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </nav>
+            </Heading>
+            <HStack gap={4}>
+              <Button
+                as={Link}
+                to="/dashboard"
+                variant={location.pathname === '/dashboard' || location.pathname === '/' ? 'solid' : 'ghost'}
+                colorScheme="blue"
+                textDecoration="none"
+              >
+                Dashboard
+              </Button>
+              <Button
+                as={Link}
+                to="/chat"
+                variant={location.pathname === '/chat' ? 'solid' : 'ghost'}
+                colorScheme="blue"
+                textDecoration="none"
+              >
+                Chat Agent
+              </Button>
+            </HStack>
+          </Flex>
+        </Container>
+      </Box>
       
-      <main className="main-content">
-        <div className="container">
+      <Box as="main" flex="1" py={8}>
+        <Container maxW="7xl">
           {children}
-        </div>
-      </main>
+        </Container>
+      </Box>
       
-      <footer style={{ 
-        borderTop: '1px solid #e2e8f0', 
-        padding: '1rem 0', 
-        marginTop: 'auto',
-        background: 'white',
-        color: '#6b7280',
-        textAlign: 'center'
-      }}>
-        <div className="container">
-          <p>&copy; 2024 Sports Analytics Platform. Powered by AI.</p>
-        </div>
-      </footer>
-    </div>
+      <Box as="footer" borderTop="1px" borderColor={borderColor} py={4} bg={bg}>
+        <Container maxW="7xl">
+          <Text textAlign="center" color="gray.600">
+            &copy; 2024 Sports Analytics Platform. Powered by AI.
+          </Text>
+        </Container>
+      </Box>
+    </Box>
   )
 }

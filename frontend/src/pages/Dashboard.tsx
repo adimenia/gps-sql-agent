@@ -1,4 +1,14 @@
 import { useState, useEffect } from 'react'
+import {
+  Box,
+  SimpleGrid,
+  Heading,
+  Text,
+  Button,
+  VStack,
+  HStack,
+  Spinner,
+} from '@chakra-ui/react'
 
 interface DashboardStats {
   activities: number
@@ -37,112 +47,123 @@ export default function Dashboard() {
     }
   }
 
+  const cardBg = 'white'
+  const borderColor = 'gray.200'
+
   if (loading) {
     return (
-      <div className="loading">
-        <p>Loading dashboard...</p>
-      </div>
+      <VStack gap={4} justify="center" align="center" minH="400px">
+        <Spinner size="xl" color="brand.500" />
+        <Text>Loading dashboard...</Text>
+      </VStack>
     )
   }
 
   if (error) {
     return (
-      <div className="error">
-        <p>Error loading dashboard: {error}</p>
-        <button className="btn" onClick={fetchDashboardStats} style={{ marginTop: '1rem' }}>
+      <Box p={6} bg="red.50" border="1px" borderColor="red.200" borderRadius="md">
+        <Text color="red.700" fontWeight="bold">Error loading dashboard!</Text>
+        <Text color="red.600" mt={2}>{error}</Text>
+        <Button mt={4} onClick={fetchDashboardStats} colorScheme="red" variant="outline">
           Retry
-        </button>
-      </div>
+        </Button>
+      </Box>
     )
   }
 
   return (
-    <div>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+    <VStack gap={8} align="stretch">
+      <Box>
+        <Heading size="xl" mb={2} color="blue.600">
           Dashboard
-        </h1>
-        <p style={{ color: '#6b7280' }}>
+        </Heading>
+        <Text color="gray.600">
           Overview of your sports analytics data
-        </p>
-      </div>
+        </Text>
+      </Box>
 
       {stats && (
-        <div className="dashboard-grid">
-          <div className="card stat-card">
-            <div className="stat-value">{stats.activities}</div>
-            <div className="stat-label">Training Activities</div>
-          </div>
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={6}>
+          <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+            <Text fontSize="3xl" fontWeight="bold" color="blue.600">{stats.activities}</Text>
+            <Text color="gray.600" fontSize="sm">Training Activities</Text>
+            <Text color="gray.500" fontSize="xs">Total sessions recorded</Text>
+          </Box>
           
-          <div className="card stat-card">
-            <div className="stat-value">{stats.athletes}</div>
-            <div className="stat-label">Athletes</div>
-          </div>
+          <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+            <Text fontSize="3xl" fontWeight="bold" color="blue.500">{stats.athletes}</Text>
+            <Text color="gray.600" fontSize="sm">Athletes</Text>
+            <Text color="gray.500" fontSize="xs">Active team members</Text>
+          </Box>
           
-          <div className="card stat-card">
-            <div className="stat-value">{stats.events}</div>
-            <div className="stat-label">Performance Events</div>
-          </div>
+          <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+            <Text fontSize="3xl" fontWeight="bold" color="orange.500">{stats.events}</Text>
+            <Text color="gray.600" fontSize="sm">Performance Events</Text>
+            <Text color="gray.500" fontSize="xs">Acceleration & movement data</Text>
+          </Box>
           
-          <div className="card stat-card">
-            <div className="stat-value">{stats.efforts}</div>
-            <div className="stat-label">Training Efforts</div>
-          </div>
-        </div>
+          <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+            <Text fontSize="3xl" fontWeight="bold" color="green.500">{stats.efforts}</Text>
+            <Text color="gray.600" fontSize="sm">Training Efforts</Text>
+            <Text color="gray.500" fontSize="xs">Velocity & intensity metrics</Text>
+          </Box>
+        </SimpleGrid>
       )}
 
-      <div className="card">
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+      <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+        <Heading size="md" mb={4}>
           Quick Actions
-        </h2>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <button 
-            className="btn" 
+        </Heading>
+        <HStack gap={4} wrap="wrap">
+          <Button 
             onClick={() => window.location.href = '/chat'}
+            colorScheme="blue"
+            size="lg"
           >
             🤖 Ask the AI Agent
-          </button>
-          <button 
-            className="btn" 
+          </Button>
+          <Button 
             onClick={fetchDashboardStats}
-            style={{ backgroundColor: '#10b981' }}
+            colorScheme="green"
+            variant="outline"
+            size="lg"
           >
             🔄 Refresh Data
-          </button>
-        </div>
-      </div>
+          </Button>
+        </HStack>
+      </Box>
 
-      <div className="card" style={{ marginTop: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+      <Box p={6} bg={cardBg} borderRadius="lg" shadow="md" border="1px" borderColor={borderColor}>
+        <Heading size="md" mb={4}>
           Getting Started
-        </h2>
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          <div>
-            <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
+        </Heading>
+        <VStack gap={4} align="stretch">
+          <Box>
+            <Heading size="sm" mb={2}>
               💬 Ask Questions
-            </h3>
-            <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+            </Heading>
+            <Text color="gray.600" fontSize="sm">
               Go to the Chat Agent and ask questions like "Who are the fastest athletes?" or "Show me recent training data"
-            </p>
-          </div>
-          <div>
-            <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
+            </Text>
+          </Box>
+          <Box>
+            <Heading size="sm" mb={2}>
               📊 View Analytics
-            </h3>
-            <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+            </Heading>
+            <Text color="gray.600" fontSize="sm">
               The dashboard shows key metrics from your sports performance data
-            </p>
-          </div>
-          <div>
-            <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
+            </Text>
+          </Box>
+          <Box>
+            <Heading size="sm" mb={2}>
               🔍 Explore Data
-            </h3>
-            <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+            </Heading>
+            <Text color="gray.600" fontSize="sm">
               Use natural language to explore velocity, acceleration, distance, and training patterns
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Text>
+          </Box>
+        </VStack>
+      </Box>
+    </VStack>
   )
 }
